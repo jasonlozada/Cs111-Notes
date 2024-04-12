@@ -107,3 +107,24 @@ A *side effect* occurs when an action on one object has non-obvious consequences
 Side ffects lead to unexpected behaviors and the resulting bugs can be hard to find. **TIP** Avoid ALL side effects in complex systems.
 
 ### Abstractions
+Many things an OS handles are complex due to varieties of hardware, software, configurations. The operating system creates, manages, and exports such abstractions.
+
+### Critical OS Abstractions
+THe OS provides some core abstractions that our computational model relies on and build others on top of those (ex: Memory abstractions, processor abstractions, communications abstractions)
+
+### Abstractions of Memory
+Many resources used by programs and people relate to data storage (i.e. variables, chunks of allocated memory, files, database records, messages to be sent and received). They all have some similar properties: you **read** and you **write** them.
+
+### Some Complicating Factors
+1. Persistent (things you want to stay: file system) vs. Transient memory (when machine is off, you don't expect to see the same values of RAM)
+2. Size of memory operations
+    - Size the user/app wants to work with
+    - Size the physical device actually works with
+3. Coherence and atomicity
+    - Coherence: wrting in location x and then reading that location, there should be the same value that was written when it is read.
+    - Atomicity: All or none info
+4. Latency
+5. Same abstraction might be implemented with many different physical devices (possibily of very different types)
+
+
+### Where Do the Conplications Come From?

@@ -2,7 +2,7 @@
 - [Operating System Principles](https://lasr.cs.ucla.edu/reiher/cs111/principles.html)
 - [Arpaci-Dusseau Chapter 1](http://pages.cs.wisc.edu/~remzi/OSTEP/dialogue-threeeasy.pdf)
 - [Arpaci-Dusseau Chapter 2](http://pages.cs.wisc.edu/~remzi/OSTEP/intro.pdf)
-
+- [Projects to do](https://github.com/remzi-arpacidusseau/ostep-projects)
 
 # Operating System Principles
 
@@ -167,8 +167,189 @@ No software-managed resource can ever be lost. All memory and secondary storage 
 
 
 # Arpaci-Dusseau Chapter 1
-### Key Ideas
-Virtualization, concurrency, and persistence
-
+**Key Ideas:** virtualization, concurrency, and persistence
 
 # Arpaci-Dusseau Chapter 2: Introduction to Operating Systems
+A running program executes instructions. The processor **fetches** an instruction from memory, **decodes** it (figures out what it is) and **executes** it. After it's done, the processor moves on to the next instruction. Keep in mind the program executes millions of instructions per second. This is the **Von Neuman** model of computing.
+
+**Operating Systems** or OS are in charge of making sure the system operates correctly and efficiently in an easy-to-use manner. To do this, it uses a technique called **virtualization** in which the OS takes a **physical resource** (i.e. processor, memory, or disk) and transforms it into a more general powerful and easy-to use **virtual** form of itself which is why an OS is called a **virtual machine**.
+
+In order to allow users to tell the OS what to do, it provides interfaces that the user can call (like APIs). A typical OS exports a few hundred **system calls** that are available to applications. This is why the OS provides a **standard library** to apps. 
+
+The OS is also called **resource manager** (because of virtualization) as it allows:
+- Many programs to run and concurrently access their own instructions and data (thus sharing memory),
+- Many programs to access devices, thus sharing disks
+
+Each of the CPU, memory, and disk is a **resource** of the OS so it is the OS's role to **manage** those resources efficiently or fairly. 
+
+***Sample code that loops and prints:***
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
+#include <assert.h>
+#include "common.h"
+
+int 
+main(int argc, char *argv[])
+{
+    if (argc != 2) {
+    fprintf(stderr, "usage: cpu <string>\n");
+    exit(1);
+    }
+    char *str = argv[1];
+    while (1) {
+        Spin(1);
+        printf("%s\n", str);
+    }
+    return 0;
+}
+```
+
+### 2.1 Virtualizing the CPU
+Compiling the sample code above and running it on a single processor (or CPU) results in: 
+```bash
+prompt> gcc -o cpu cpu.c -Wall
+prompt> ./cpu "A"
+A
+A
+A
+A
+^C
+prompt> 
+```
+Compling code but with diffrent instances of the same program results in:
+```bash
+prompt> ./cpu A & ./cpu B & ./cpu C & ./cpu D &
+[1] 7353
+[2] 7354
+[3] 7355
+[4] 7356
+A
+B
+D
+C
+A
+B
+D
+C
+A
+***
+```
+Somehow all the programs are running at the same time. This is because the OS gives an *illusion* that the system has a very large number of virtual CPUs. This is because turning a single CPU (or a small set of them) into an infinite number of CPUs allows many programs to run at once. This is called **virtualizing the CPU**.
+
+### 2.2 Virtualizing the Memory
+*Figures 2.3* shows a program that accesses Memory (mem.c):
+```c
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "common.h"
+
+int 
+main(int argc, char *argv[])
+{
+    int *p = malloc(sizeof(int)); // a1
+    assert(p != NULL);
+    printf("(%d) address pointed to by p: %p\n", getpid(), p); // a2
+    *p = 0; // a3
+    while (1){
+        Spin(1);
+        *p = *p + 1;
+        printf("(%d) p: %d\n", getpid(), *p); // a4
+    }
+}
+```
+**CODE EXPLANATION:** *Figure 2.3* allocates some memory by calling ``` malloc()```. The program does a couple of things. First, it allocates some memory (line a1). Then, it prints out the address of the memory (a2), and then puts the number zero into the first slot of the newly allocated memory (a3). Finally, it loops, delaying for a second and incrementing the value stored at the address held in p. With every print statement, it also prints out what is called the process identifier (the PID) of the running program.
+ his PID is unique per running process.
+
+---
+
+Memory is just an array of bytes; to **read** memory, one must specify an **address** to be able to access the data stored there; to **write** (or **update**) memory, one must also specify the data to be written to the given address. A program keeps all of its data structures in memory, and accesses them through various instructions, like loads and stores or other explicit instructions that access memory in doing their work. 
+
+
+*Figure 2.4*: Running the Memory Program multiple times:
+```bash
+prompt> ./mem
+(2134) address pointed to by p: 0x200000
+(2134) p: 1
+(2134) p: 2
+(2134) p: 3
+(2134) p: 4
+(2134) p: 5
+ˆC
+
+prompt> ./mem & ./mem &
+[1] 24113
+[2] 24114
+(24113) address pointed to by p: 0x200000
+(24114) address pointed to by p: 0x200000
+(24113) p: 1
+(24114) p: 1
+(24114) p: 2
+(24113) p: 2
+(24113) p: 3
+(24114) p: 3
+(24113) p: 4
+(24114) p: 4
+***
+```
+
+What happens here is **virtualization** as each process accesses its own private **virtual address space** or **address space**, which the OS somehows maps onto the physical memory of the machine. A memory reference within one running program doesn't affect the address space of other processes as the program has physical memory to itself. This is because physical memory is a shared resource. 
+
+### 2.3 Concurrency
+*Figure 2.5:* A Multi-thread Program (threads.c)
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include "common.h"
+#include "common_threads.h"
+
+volatile int counter = 0;
+int loops;
+
+void *worker(void *arg) {
+    int i;
+    for (i = 0; i < loops; i++) {
+    counter++;
+    }
+    return NULL;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+    fprintf(stderr, "usage: threads <value>\n");
+    exit(1);
+    }
+    loops = atoi(argv[1]);
+    pthread_t p1, p2;
+    printf("Initial value : %d\n", counter);
+
+    Pthread_create(&p1, NULL, worker, NULL);
+    Pthread_create(&p2, NULL, worker, NULL);
+    Pthread_join(p1, NULL);
+    Pthread_join(p2, NULL);
+    printf("Final value : %d\n", counter);
+    return 0;
+}
+```
+The figure above uses ```Pthread.create()``` and creates two **threads**. (Think of a thread as a function running with the same memory space as other functions, with more than one of them active at a time). Each thread starts running in a routine called ```worker()``` which increases counter in a loop for loops number of times.
+
+Concurrency is used to refer to a host of problems that arise and must be addressed when working on many things at once in the same program.
+
+
+```bash
+prompt> gcc -o threads threads.c -Wall -pthread
+prompt> ./threads 1000
+Initial value: 0
+Final value: 2000
+```
+
+```bash
+prompt> ./threads 100000
+Initial value : 0
+Final value : 143012 // huh??
+prompt> ./threads 100000
+Initial value : 0
+Final value : 137298 // what the??
+```
